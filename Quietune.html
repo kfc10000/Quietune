@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Quietune</title>
+  <title>Quietune: Tinnitus Explorer</title>
   <style>
     body {
       font-family: sans-serif;
@@ -14,84 +14,106 @@
     .control-group {
       margin: 20px;
     }
+    #toggleButton {
+      margin: 30px;
+      padding: 20px 40px;
+      font-size: 20px;
+      border: none;
+      border-radius: 10px;
+      color: white;
+    }
+    .start {
+      background-color: green;
+    }
+    .stop {
+      background-color: red;
+    }
   </style>
 </head>
 <body>
-  <h1>Quietune</h1>
+  <h1>Quietune: Tinnitus Explorer</h1>
 
   <div class="control-group">
-    <label for="freq">Frequency (Hz): </label><br>
-    <input type="range" id="freq" min="20" max="20000" step="1" value="10000">
-    <div id="freqVal">10000 Hz</div>
+    <label for="freq">Tinnitus Frequency (Hz): </label><br>
+    <input type="range" id="freq" min="1000" max="15000" step="1" value="8200">
+    <div id="freqVal">8200 Hz</div>
   </div>
 
   <div class="control-group">
-    <label for="delay">Modulation (microseconds): </label><br>
-    <input type="range" id="delay" min="0" max="100" step="0.1" value="0">
-    <div id="delayVal">0 µs</div>
+    <label for="modDepth">Modulation Depth (%): </label><br>
+    <input type="range" id="modDepth" min="0" max="100" step="1" value="0">
+    <div id="modDepthVal">0%</div>
   </div>
 
-  <button id="start">Start</button>
-  <button id="stop">Stop</button>
+  <div class="control-group">
+    <label for="modRate">Modulation Rate (Hz): </label><br>
+    <input type="range" id="modRate" min="0.1" max="30" step="0.1" value="5">
+    <div id="modRateVal">5 Hz</div>
+  </div>
+
+  <button id="toggleButton" class="start">START</button>
 
   <script>
     let context = new (window.AudioContext || window.webkitAudioContext)();
-    let osc1, osc2, delayNode;
+    let carrier, modulator, gainNode;
     let isPlaying = false;
 
     const freqSlider = document.getElementById('freq');
-    const delaySlider = document.getElementById('delay');
+    const modDepthSlider = document.getElementById('modDepth');
+    const modRateSlider = document.getElementById('modRate');
     const freqVal = document.getElementById('freqVal');
-    const delayVal = document.getElementById('delayVal');
+    const modDepthVal = document.getElementById('modDepthVal');
+    const modRateVal = document.getElementById('modRateVal');
+    const toggleButton = document.getElementById('toggleButton');
 
-    function updateFrequency(value) {
-      freqVal.innerText = `${value} Hz`;
-      if (osc1 && osc2) {
-        osc1.frequency.setValueAtTime(value, context.currentTime);
-        osc2.frequency.setValueAtTime(value, context.currentTime);
-      }
+    function updateValues() {
+      freqVal.textContent = `${freqSlider.value} Hz`;
+      modDepthVal.textContent = `${modDepthSlider.value}%`;
+      modRateVal.textContent = `${modRateSlider.value} Hz`;
     }
 
-    function updateDelay(value) {
-      delayVal.innerText = `${value} µs`;
-      if (delayNode) {
-        delayNode.delayTime.setValueAtTime(value / 1e6, context.currentTime);
+    freqSlider.oninput = modDepthSlider.oninput = modRateSlider.oninput = updateValues;
+
+    toggleButton.onclick = () => {
+      if (!isPlaying) {
+        const freq = parseFloat(freqSlider.value);
+        const depth = parseFloat(modDepthSlider.value) / 100;
+        const rate = parseFloat(modRateSlider.value);
+
+        carrier = context.createOscillator();
+        modulator = context.createOscillator();
+        gainNode = context.createGain();
+
+        carrier.type = 'sine';
+        carrier.frequency.value = freq;
+
+        modulator.type = 'sine';
+        modulator.frequency.value = rate;
+
+        gainNode.gain.value = freq * depth;
+
+        modulator.connect(gainNode);
+        gainNode.connect(carrier.frequency);
+        carrier.connect(context.destination);
+
+        carrier.start();
+        modulator.start();
+
+        toggleButton.textContent = 'STOP';
+        toggleButton.classList.remove('start');
+        toggleButton.classList.add('stop');
+        isPlaying = true;
+      } else {
+        carrier.stop();
+        modulator.stop();
+        toggleButton.textContent = 'START';
+        toggleButton.classList.remove('stop');
+        toggleButton.classList.add('start');
+        isPlaying = false;
       }
-    }
-
-    freqSlider.oninput = (e) => updateFrequency(e.target.value);
-    delaySlider.oninput = (e) => updateDelay(e.target.value);
-
-    document.getElementById('start').onclick = () => {
-      if (isPlaying) return;
-      isPlaying = true;
-
-      const frequency = parseFloat(freqSlider.value);
-      const delayMicros = parseFloat(delaySlider.value);
-
-      osc1 = context.createOscillator();
-      osc2 = context.createOscillator();
-      delayNode = context.createDelay();
-
-      osc1.type = 'sine';
-      osc2.type = 'sine';
-      osc1.frequency.value = frequency;
-      osc2.frequency.value = frequency;
-      delayNode.delayTime.value = delayMicros / 1e6;
-
-      osc1.connect(context.destination);
-      osc2.connect(delayNode).connect(context.destination);
-
-      osc1.start();
-      osc2.start();
     };
 
-    document.getElementById('stop').onclick = () => {
-      if (!isPlaying) return;
-      osc1.stop();
-      osc2.stop();
-      isPlaying = false;
-    };
+    updateValues();
   </script>
 </body>
 </html>
